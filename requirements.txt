@@ -1,8 +1,13 @@
 pypdf
 langchain
+langchain-community
+langchain-huggingface
+langchain-core
 torch
 accelerate
-bitsandbytes
 transformers
 sentence_transformers
-faiss_cpu
+faiss-cpu
+rank-bm25
+python-dotenv
+chainlit

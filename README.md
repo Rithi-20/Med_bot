@@ -1,127 +1,151 @@
-# 🩺 Med_bot - Medical RAG QA Chatbot
+# Med_bot: Medical Retrieval-Augmented Generation (RAG) System
 
-An open-source, local **Retrieval-Augmented Generation (RAG)** Medical Assistant chatbot powered by **LangChain**, **FAISS**, **HuggingFace Embeddings**, **Llama 2**, and **Chainlit**.
-
-This application allows users to ingest custom medical PDF reference materials, index them locally into a vector store, and perform interactive, context-aware Q&A directly through a modern web user interface with automated source citation.
+Med_bot is a domain-specific Retrieval-Augmented Generation (RAG) assistant designed for accurate, context-grounded medical information retrieval. Built with LangChain, FAISS, BM25, and Llama 3.1, the system allows users to query medical literature with strict guardrails against hallucination and external parametric memory leakage.
 
 ---
 
-## 📌 Features
+## Overview
 
-- **Document Ingestion**: Extracts text from medical PDF files stored in `data/` and chunks them for semantic indexing.
-- **Vector Search**: Uses `FAISS` and `sentence-transformers/all-MiniLM-L6-v2` to compute embeddings and retrieve relevant context.
-- **Local LLM Inference**: Employs quantized Llama 2 (`TheBloke/Llama-2-7B-Chat-GGML`) via `CTransformers` for private, CPU-friendly answer generation without external API keys.
-- **Interactive UI**: Powered by **Chainlit** for real-time streaming, chat session management, and response formatting.
-- **Source Citation**: Displays source document names and page numbers alongside generated answers for verification.
+Medical question-answering systems require strict adherence to reference literature to prevent misinformation. Med_bot implements an end-to-end pipeline that ingests medical textbooks and reference documentation, constructs a hybrid sparse-dense index, and executes grounded retrieval. If an inquiry cannot be answered from the provided reference documents, the system explicitly refuses rather than guessing from pre-trained model weights.
 
 ---
 
-## 🏗 Architecture & Workflow
+## Architecture and Workflow
 
 ```
-[ PDF Documents ] ──> PyPDFLoader & Text Splitter
-                             │
-                             ▼
-                 [ HuggingFace Embeddings ]
-                             │
-                             ▼
-                    [ FAISS Vector Store ]
-                             │
-[ User Query ] ──> RetrievalQA Chain (Top-k Retrieval) ──> [ Llama-2 LLM ] ──> [ Chainlit UI ]
+[ Medical Documents (PDF) ]
+            │
+            ▼
+[ Ingestion Pipeline (ingest.py) ]
+  • Document-level text extraction
+  • Section boundary preservation
+  • Dense Embeddings (sentence-transformers/all-MiniLM-L6-v2)
+            │
+            ▼
+    [ Vector Store ] ──────────────┐
+     (FAISS Index)                 │
+                                   ▼
+[ User Query ] ──────────> [ Hybrid Retriever ] (model.py)
+                            • BM25 Keyword Search (Morphological Stemming)
+                            • FAISS Dense Semantic Search
+                            • Reciprocal Rank Fusion / Weighted Ensemble
+                                   │
+                                   ▼
+                        [ Relevant Context ]
+                                   │
+                                   ▼
+                      [ LLM Inference Engine ]
+                        • Model: meta-llama/Llama-3.1-8B-Instruct
+                        • Strict Grounding & Medical Guardrails
+                        • Intent Classification & Refusal Protocol
+                                   │
+                                   ▼
+                         [ Chainlit Web UI ]
+                        • Token Streaming
+                        • Verified Document Citations
 ```
-
-1. **Ingestion (`ingest.py`)**: Loads documents from `./data/`, splits them into overlapping chunks (500 characters, 50 overlap), embeds them using `all-MiniLM-L6-v2`, and saves the index to `./vectorstore/db_faiss`.
-2. **Retrieval & QA (`model.py`)**: Loads the FAISS vector database, constructs a customized prompt template, queries the Llama-2 LLM with top matches, and streams the answer back to the Chainlit interface with source metadata.
 
 ---
 
-## 📁 Repository Structure
+## Key Capabilities
+
+- **Hybrid Ensemble Retrieval**: Combines BM25 lexical keyword matching with FAISS dense vector search (`sentence-transformers/all-MiniLM-L6-v2`). This ensures precise recall for specific medical terminology and acronyms while retaining semantic understanding of natural-language descriptions.
+- **Morphological Tokenization**: Implements custom pre-processing in BM25 to normalize clinical variations (plurals, suffix variations, and symptoms such as rashes to rash).
+- **Strict Grounding and Hallucination Control**: Incorporates strict boundary instructions within the prompt template. If an inquiry is not addressed within the reference literature, the model states that the information is unavailable and advises consulting a healthcare professional.
+- **Typo Tolerance and Clinical Query Understanding**: Handles misspellings, colloquial symptom descriptions, and diagnostic symptom-matching queries.
+- **Serverless Cloud Inference**: Integrates with Hugging Face Serverless Inference Endpoints (`meta-llama/Llama-3.1-8B-Instruct`), eliminating local GPU/RAM bottlenecks.
+- **Automated Source Attribution**: References the specific source documents utilized to generate each response.
+
+---
+
+## Repository Structure
 
 ```
 Med_bot/
-├── data/                    # Directory for input medical PDF files (created by user)
-├── vectorstore/             # Directory where FAISS index files are saved after ingestion
+├── data/                    # Source medical PDF files
+├── vectorstore/             # Serialized FAISS index (generated by ingest.py)
 │   └── db_faiss/
-├── ingest.py                # Script to parse PDFs and create the FAISS vector database
-├── model.py                 # Core RAG logic and Chainlit web UI runner
-├── requirements.txt         # Project Python dependencies
-└── README.md                # Project documentation
+├── ingest.py                # Document parsing, chunking, and vector indexing
+├── model.py                 # Hybrid retrieval, prompt pipeline, and Chainlit interface
+├── requirements.txt         # Project dependencies
+├── chainlit.md              # Chainlit welcome interface configuration
+└── README.md                # Technical documentation
 ```
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
-- **Framework**: LangChain (`langchain`, `langchain_community`)
-- **UI**: Chainlit (`chainlit`)
-- **LLM**: Llama-2-7B Chat GGML (`CTransformers`)
-- **Embeddings**: Sentence-Transformers (`sentence-transformers/all-MiniLM-L6-v2`)
-- **Vector Database**: FAISS (`faiss-cpu`)
-- **Document Parser**: PyPDF (`pypdf`)
+- **Orchestration**: LangChain (`langchain`, `langchain-community`, `langchain-huggingface`)
+- **Large Language Model**: Meta Llama 3.1 8B Instruct (`meta-llama/Llama-3.1-8B-Instruct`)
+- **Embeddings**: Sentence-Transformers (`all-MiniLM-L6-v2`)
+- **Dense Vector Database**: FAISS (`faiss-cpu`)
+- **Sparse Lexical Search**: BM25 (`rank-bm25`)
+- **Document Processing**: PyPDF (`pypdf`)
+- **User Interface**: Chainlit (`chainlit`)
 
 ---
 
-## 🚀 Setup & Installation
+## Setup and Installation
 
 ### 1. Prerequisites
-- Python 3.9+ installed on your system.
-- Git (optional, for version control).
+- Python 3.10 or higher
+- Git
+- A Hugging Face account and an API token with inference permissions
 
-### 2. Create Virtual Environment & Install Dependencies
+### 2. Environment Configuration
+Clone the repository and create a virtual environment:
+
 ```bash
-# Clone or open repository folder
+git clone https://github.com/<your-username>/Med_bot.git
 cd Med_bot
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv venv
 
-# Activate virtual environment
-# On Windows (PowerShell):
+# Windows (PowerShell)
 .\venv\Scripts\Activate.ps1
-# On Linux/macOS:
-source venv/bin/activate
 
-# Install requirements
+# Linux / macOS
+source venv/bin/activate
+```
+
+Install the required packages:
+```bash
 pip install -r requirements.txt
-pip install chainlit ctransformers
+```
+
+### 3. API Token Configuration
+Create a `.env` file in the root directory and add your Hugging Face API token:
+
+```env
+HUGGINGFACEHUB_API_TOKEN=hf_your_actual_token_here
 ```
 
 ---
 
-## 💻 Usage Instructions
+## Ingestion and Usage
 
-### Step 1: Add Medical PDF Documents
-1. Create a `data/` folder inside the project root if it does not exist:
-   ```bash
-   mkdir data
-   ```
-2. Place your target medical reference PDF documents into the `data/` folder.
+### Step 1: Ingest Medical Literature
+Place your medical PDF documents into the `data/` folder, then run the ingestion script:
 
-### Step 2: Build the Vector Store
-Run the ingestion script to process the documents and create the local vector store:
 ```bash
 python ingest.py
 ```
-> This will generate the vector database files under `vectorstore/db_faiss/`.
 
-### Step 3: Run the Chatbot Interface
-Launch the Chainlit web UI:
+This processes the PDFs, splits text while preserving section boundaries, computes vector embeddings, and serializes the index to `vectorstore/db_faiss/`.
+
+### Step 2: Start the Web Application
+Run the Chainlit interface:
+
 ```bash
 chainlit run model.py -w
 ```
-Open your browser and navigate to `http://localhost:8000` to interact with **Med_bot**.
+
+Navigate to `http://localhost:8000` in your browser to interact with the medical assistant.
 
 ---
 
-## ⚙️ Configuration & Customization
+## Medical Disclaimer
 
-- **Prompt Engineering**: Modify `custom_prompt_template` in `model.py` to change how the bot structures its answers or handles missing context.
-- **Chunking Parameters**: Adjust `chunk_size` and `chunk_overlap` in `ingest.py` to optimize document chunking based on your source materials.
-- **LLM Parameters**: Fine-tune `max_new_tokens` and `temperature` in `load_llm()` inside `model.py`.
-
----
-
-## ⚠️ Notes & Troubleshooting
-
-- **CPU Performance**: The model runs on CPU using quantized GGML weights. First response loading may take a moment while the model initializes.
-- **Dangerous Deserialization**: `FAISS.load_local` includes `allow_dangerous_deserialization=True` in `model.py` to load locally trusted `.pkl` vector files created by `ingest.py`. Ensure only trusted documents are ingested.
+Med_bot is an academic and informational research prototype developed for context-grounded retrieval. It is not a certified diagnostic device and does not provide medical diagnoses, treatment plans, or emergency care instructions. All clinical decisions must be made by qualified healthcare professionals.

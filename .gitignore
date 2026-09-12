@@ -6,3 +6,7 @@ vectorstore/
 *.pkl
 *.dll
 *.lib
+.env
+.vscode/
+.files/
+.ruff_cache/
