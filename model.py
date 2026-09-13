@@ -155,27 +155,6 @@ def get_qa_chain():
     return GLOBAL_CHAIN
 
 
-# Quick starter prompts for medical queries supported by the dataset
-@cl.set_starters
-async def set_starters():
-    return [
-        cl.Starter(
-            label="Dengue Symptoms",
-            message="What are the symptoms and signs of Dengue Fever?",
-        ),
-        cl.Starter(
-            label="Viral Fever Symptoms",
-            message="What are the symptoms of viral fever?",
-        ),
-        cl.Starter(
-            label="Malaria Prevention",
-            message="How can Malaria be prevented and controlled?",
-        ),
-        cl.Starter(
-            label="Typhoid Causes",
-            message="What causes Typhoid and what are its symptoms?",
-        ),
-    ]
 
 
 @cl.on_chat_start
