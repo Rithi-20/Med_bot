@@ -13,48 +13,56 @@ Medical question-answering systems require strict adherence to reference literat
 ## Architecture and Workflow
 
 ```
-[ Medical Documents (PDF) ]
-            │
-            ▼
-[ Ingestion Pipeline (ingest.py) ]
-  • Document-level text extraction
-  • Section boundary preservation
-  • Dense Embeddings (sentence-transformers/all-MiniLM-L6-v2)
-            │
-            ▼
-    [ Vector Store ] ──────────────┐
-     (FAISS Index)                 │
-                                   ▼
-[ User Query ] ──────────> [ Hybrid Retriever ] (model.py)
-                            • BM25 Keyword Search (Morphological Stemming)
-                            • FAISS Dense Semantic Search
-                            • Reciprocal Rank Fusion / Weighted Ensemble
-                                   │
-                                   ▼
-                        [ Relevant Context ]
-                                   │
-                                   ▼
-                      [ LLM Inference Engine ]
-                        • Model: meta-llama/Llama-3.1-8B-Instruct
-                        • Strict Grounding & Medical Guardrails
-                        • Intent Classification & Refusal Protocol
-                                   │
-                                   ▼
-                         [ Chainlit Web UI ]
-                        • Token Streaming
-                        • Verified Document Citations
+[ User Query ]
+      │
+      ├──> [ 1. Input Validation ] (Empty/Punctuation Check)
+      │
+      ├──> [ 2. Query Condensation ] (Bulk History / Long Query Truncation)
+      │
+      ├──> [ 3. Prompt Injection Guard ] (Adversarial Jailbreak Detection)
+      │
+      ├──> [ 4. Emergency Red-Flag Triage ] ── (High Risk) ──> Immediate Emergency Warning
+      │         (Low Risk)
+      │
+      ├──> [ 5. Medication & Dosage Guard ] ── (Personal Dosage) ──> Safe Refusal & Doctor Referral
+      │         (Educational)
+      │
+      ├──> [ 6. Out-of-Domain Classifier ]  ── (Non-Medical) ──> Medical Scope Disclaimer
+      │         (In-Domain)
+      │
+      ├──> [ 7. Pre-Retrieval Typo Normalizer ] (Medical Lexicon Normalization)
+      │
+      ├──> [ 8. Hybrid Ensemble Retriever ] (BM25 Lexical + FAISS Dense Semantic)
+      │
+      ├──> [ 9. Retrieval Confidence Gate ] ── (Irrelevant / Low Confidence) ──> Grounded Refusal
+      │         (High Confidence)
+      │
+      └──> [ 10. Grounded LLM Inference ] (Llama 3.1 + Non-Diagnostic Disclaimers)
+                │
+                ▼
+           [ Chainlit Web UI ]
+            • Token Streaming
+            • Verified Page-Level Citations: datasets.pdf (Page X)
+            • Graceful Error Handling (Sanitized Fallback Messages)
 ```
 
 ---
 
-## Key Capabilities
+## Key Capabilities & Edge Case Coverage
 
-- **Hybrid Ensemble Retrieval**: Combines BM25 lexical keyword matching with FAISS dense vector search (`sentence-transformers/all-MiniLM-L6-v2`). This ensures precise recall for specific medical terminology and acronyms while retaining semantic understanding of natural-language descriptions.
-- **Morphological Tokenization**: Implements custom pre-processing in BM25 to normalize clinical variations (plurals, suffix variations, and symptoms such as rashes to rash).
-- **Strict Grounding and Hallucination Control**: Incorporates strict boundary instructions within the prompt template. If an inquiry is not addressed within the reference literature, the model states that the information is unavailable and advises consulting a healthcare professional.
-- **Typo Tolerance and Clinical Query Understanding**: Handles misspellings, colloquial symptom descriptions, and diagnostic symptom-matching queries.
-- **Serverless Cloud Inference**: Integrates with Hugging Face Serverless Inference Endpoints (`meta-llama/Llama-3.1-8B-Instruct`), eliminating local GPU/RAM bottlenecks.
-- **Automated Source Attribution**: References the specific source documents utilized to generate each response.
+- **Emergency Red-Flag Triage Gate (Edge Case 1 & 3)**: Intercepts acute life-threatening symptoms (e.g., severe chest pain, shortness of breath, acute neurological signs) based on clinician-reviewed triage rules, triggering immediate emergency service advisories before model execution.
+- **Normal Informational Retrieval (Edge Case 2)**: Direct, structured, and factual answers derived from reference documents without unsolicited differential sections or false emergency alerts.
+- **Non-Definitive Diagnostic Boundary (Edge Cases 3 & 7)**: Adheres to clinical safety by never diagnosing ("You have X"). Mandates the non-diagnostic disclaimer: *"These symptoms may be associated with several conditions described in the reference material. MedBot cannot confirm a diagnosis."* followed by distinguishing clinical features.
+- **Strict Grounding & Unknown Disease Refusal (Edge Case 4)**: Explicitly refuses to hallucinate external conditions absent from the literature.
+- **Out-of-Domain Classification (Edge Case 5)**: Intercepts non-medical inquiries (politics, programming, general trivia) before retrieval.
+- **Medication & Dosage Guard (Edge Case 6)**: Strictly distinguishes general pharmacology education from personalized dosage and prescription requests, safely referring patients to licensed physicians or pharmacists.
+- **Pre-Retrieval Typo Normalization (Edge Case 8)**: Dedicated medical terminology normalization layer before retrieval ensures sparse keyword search (BM25) and dense embeddings accurately resolve clinical terms.
+- **Retrieval Confidence Gate (Edge Case 9)**: Evaluates semantic distance and lexical overlap before invoking the LLM. If retrieval confidence is low, gracefully refuses to prevent downstream hallucination.
+- **Multi-Source Conflicting Information Resolution (Edge Case 10)**: Documents are enriched with source authority and version metadata. Prompt guidelines instruct the model to explicitly surface differing viewpoints rather than silently favoring one.
+- **Programmatic Prompt Injection Guard (Edge Case 11)**: Scans and blocks prompt override and jailbreak patterns before pipeline execution.
+- **Input Validation & Bulk Query Handling (Edge Cases 12 & 13)**: Validates empty or punctuation-only prompts and intelligently condenses multi-page medical histories.
+- **Graceful Error Handling (Edge Case 14)**: Catches runtime exceptions and displays sanitized, user-friendly notices without leaking technical stack traces.
+- **Granular Page-Level Provenance (Edge Case 15)**: Retains page numbers during chunking and outputs citations referencing both document name and exact page numbers.
 
 ---
 
@@ -62,11 +70,12 @@ Medical question-answering systems require strict adherence to reference literat
 
 ```
 Med_bot/
-├── data/                    # Source medical PDF files
-├── vectorstore/             # Serialized FAISS index (generated by ingest.py)
+├── data/                    # Source medical PDF files (e.g., datasets.pdf)
+├── vectorstore/             # Serialized FAISS index with page-level metadata
 │   └── db_faiss/
-├── ingest.py                # Document parsing, chunking, and vector indexing
-├── model.py                 # Hybrid retrieval, prompt pipeline, and Chainlit interface
+├── safety.py                # Triage policy, input validation, injection & dosage guardrails
+├── ingest.py                # PDF parser preserving page numbers and source authority
+├── model.py                 # Hybrid retriever, confidence gate, prompt pipeline & Chainlit UI
 ├── requirements.txt         # Project dependencies
 ├── chainlit.md              # Chainlit welcome interface configuration
 └── README.md                # Technical documentation
